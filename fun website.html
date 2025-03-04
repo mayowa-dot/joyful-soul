@@ -1,0 +1,292 @@
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Joyful Playground</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000000;
+            color: white;
+            font-family: 'Arial', sans-serif;
+            text-align: center;
+        }
+        canvas {
+            display: block;
+            margin: auto;
+            background-color: transparent;
+        }
+        #scoreboard, #lives, #title {
+            position: absolute;
+            color: white;
+            font-size: 20px;
+            font-family: 'Arial', sans-serif;
+        }
+        #scoreboard {
+            top: 20px;
+            left: 20px;
+        }
+        #lives {
+            top: 20px;
+            right: 20px;
+        }
+        #title {
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 40px;
+            font-weight: bold;
+            letter-spacing: 5px;
+        }
+        .character {
+            width: 30px;
+            height: 40px;
+            border-radius: 10px;
+        }
+        .female {
+            background-color: #FF69B4; /* Pink for female character */
+        }
+        .male {
+            background-color: #1E90FF; /* Blue for male character */
+        }
+        .tree {
+            width: 30px;
+            height: 50px;
+            background-color: #228B22; /* Green for trees */
+            border-radius: 5px;
+            position: absolute;
+        }
+        .tree-trunk {
+            width: 10px;
+            height: 20px;
+            background-color: #8B4513; /* Brown for tree trunk */
+            position: absolute;
+            bottom: 0;
+            left: 10px;
+        }
+        #restartBtn {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 20px;
+            padding: 10px 20px;
+            background-color: #FF6347;
+            border: none;
+            color: white;
+            cursor: pointer;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="title">The Joyful Playground</div>
+    <div id="scoreboard">Score: 0</div>
+    <div id="lives">Lives: 3</div>
+    <button id="restartBtn">Restart Game</button>
+    <canvas id="gameCanvas"></canvas>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const restartBtn = document.getElementById('restartBtn');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        // Character properties
+        let character = {
+            x: 50,
+            y: canvas.height - 70,
+            width: 30,
+            height: 40,
+            speed: 5,
+            jumpHeight: 20,
+            isJumping: false,
+            jumpStartY: 0,
+            gender: 'female', // Default gender
+        };
+
+        let obstacles = [];
+        let score = 0;
+        let speed = 3; // Initial speed of obstacles
+        let lives = 3; // Initial lives
+        let gameInterval;
+        let clouds = [];
+        
+        // Cloud movement properties
+        function createCloud() {
+            const cloudWidth = 100;
+            const cloudHeight = 50;
+            const cloudX = canvas.width;
+            const cloudY = Math.random() * canvas.height / 2;
+            clouds.push({x: cloudX, y: cloudY, width: cloudWidth, height: cloudHeight});
+        }
+
+        // Draw clouds in the background
+        function drawClouds() {
+            ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+            clouds.forEach((cloud, index) => {
+                ctx.beginPath();
+                ctx.ellipse(cloud.x, cloud.y, cloud.width, cloud.height, 0, 0, 2 * Math.PI);
+                ctx.fill();
+                cloud.x -= 0.5; // Move clouds to the left
+
+                if (cloud.x + cloud.width < 0) {
+                    clouds.splice(index, 1);  // Remove off-screen clouds
+                }
+            });
+        }
+
+        // Gender selection
+        function selectGender() {
+            const genderChoice = prompt("Choose your character's gender: (male or female)");
+            if (genderChoice === 'male' || genderChoice === 'female') {
+                character.gender = genderChoice;
+            } else {
+                alert('Invalid choice! Defaulting to female.');
+                character.gender = 'female';
+            }
+        }
+
+        // Draw the character
+        function drawCharacter() {
+            ctx.fillStyle = character.gender === 'female' ? '#FF69B4' : '#1E90FF'; // Pink for female, blue for male
+            ctx.fillRect(character.x, character.y, character.width, character.height);
+        }
+
+        // Generate trees as obstacles
+        function generateObstacle() {
+            let obstacleX = canvas.width;
+            let obstacleY = canvas.height - 50;
+            let treeHeight = 50;
+            let treeWidth = 30;
+            obstacles.push({x: obstacleX, y: obstacleY, width: treeWidth, height: treeHeight});
+        }
+
+        // Draw trees (obstacles)
+        function drawObstacles() {
+            obstacles.forEach(obstacle => {
+                // Draw tree foliage
+                ctx.fillStyle = "#228B22";
+                ctx.fillRect(obstacle.x, obstacle.y - obstacle.height, obstacle.width, obstacle.height);
+
+                // Draw tree trunk
+                ctx.fillStyle = "#8B4513";
+                ctx.fillRect(obstacle.x + 10, obstacle.y - obstacle.height + 30, 10, 20);
+            });
+        }
+
+        // Move obstacles
+        function moveObstacles() {
+            obstacles.forEach(obstacle => {
+                obstacle.x -= speed;
+                if (obstacle.x + obstacle.width < 0) {
+                    obstacles.shift();  // Remove off-screen obstacles
+                    score++;
+                }
+                // Check for collision with the character (hit the top of tree)
+                if (character.x < obstacle.x + obstacle.width && character.x + character.width > obstacle.x &&
+                    character.y < obstacle.y - obstacle.height + 30 && character.y + character.height > obstacle.y - obstacle.height) {
+                    lives--;
+                    if (lives <= 0) {
+                        gameOver();
+                    } else {
+                        obstacles = [];
+                        score = 0;  // Reset score after losing a life
+                    }
+                }
+            });
+        }
+
+        // Jump logic
+        function jump() {
+            if (!character.isJumping) {
+                character.isJumping = true;
+                character.jumpStartY = character.y;
+            }
+        }
+
+        // Update character position
+        function updateCharacterPosition() {
+            if (character.isJumping) {
+                if (character.y > character.jumpStartY - character.jumpHeight) {
+                    character.y -= 5;
+                } else {
+                    character.isJumping = false;
+                }
+            } else {
+                if (character.y < canvas.height - 70) {
+                    character.y += 5; // Fall back down
+                }
+            }
+        }
+
+        // Update score and lives display
+        function drawScoreAndLives() {
+            document.getElementById('scoreboard').textContent = "Score: " + score;
+            document.getElementById('lives').textContent = "Lives: " + lives;
+        }
+
+        // Game Over function
+        function gameOver() {
+            clearInterval(gameInterval);
+            restartBtn.style.display = 'block'; // Show the restart button
+            alert("Game Over! You hit a tree!");
+        }
+
+        // Game update function
+        function update() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw background elements
+            drawClouds(); // Draw moving clouds
+
+            // Draw the character and obstacles
+            drawCharacter();
+            drawObstacles();
+            moveObstacles();
+            updateCharacterPosition();
+            drawScoreAndLives();
+        }
+
+        // Main game loop
+        function gameLoop() {
+            update();
+            if (Math.random() < 0.01) { // Random chance to spawn obstacle
+                generateObstacle();
+            }
+            if (Math.random() < 0.02) { // Random chance to spawn cloud
+                createCloud();
+            }
+
+            // Gradually increase difficulty by making obstacles move faster
+            if (score % 10 === 0 && speed < 6) {
+                speed += 0.1; // Increase speed by a small amount every 10 points
+            }
+        }
+
+        // Event Listeners
+        window.addEventListener('keydown', (e) => {
+            if (e.key === ' ' || e.key === 'ArrowUp') {
+                jump();
+            }
+        });
+
+        // Restart the game
+        restartBtn.addEventListener('click', () => {
+            // Reset variables
+            lives = 3;
+            score = 0;
+            speed = 3;
+            obstacles = [];
+            character.y = canvas.height - 70;
+            restartBtn.style.display = 'none'; // Hide the restart button
+            gameInterval = setInterval(gameLoop, 1000 / 60); // Restart the game loop
+        });
+
+        // Start Game
+        selectGender(); // Prompt for gender at the start
+        gameInterval = setInterval(gameLoop, 1000 / 60);
+    </script>
+</body>
+</html>
